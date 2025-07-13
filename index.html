@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en" class="transition-colors duration-300">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Impermanent Loss Calculator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class'
+    };
+  </script>
+</head>
+<body id="app" class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300 p-4 sm:p-6">
+  <div class="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-4 sm:p-6 rounded shadow">
+
+    <!-- ✅ Banner -->
+    <img src="banner.png" alt="DeFi Banner" class="w-full mb-4 rounded">
+
+    <!-- ✅ Header + Toggle + X Link -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+      <h1 class="text-xl sm:text-2xl font-bold text-indigo-700 dark:text-indigo-300 leading-snug">
+        Impermanent Loss + Opportunity Cost Calculator
+      </h1>
+      <div class="flex items-center gap-2">
+        <button onclick="toggleDarkMode()" class="bg-gray-200 dark:bg-gray-700 text-sm px-3 py-1 rounded shadow">
+          🌓 Dark Mode
+        </button>
+        <a href="https://x.com/austiinxbt" target="_blank" class="bg-black text-white text-sm px-3 py-1 rounded shadow hover:bg-gray-800 transition">
+          𝕏 / @austiinxbt
+        </a>
+      </div>
+    </div>
+
+    <!-- ✅ Description -->
+    <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+      📉 <strong>Impermanent Loss</strong> is the reduced value you get when withdrawing from a liquidity pool vs. holding.<br>
+      🔴 <strong>Opportunity Cost</strong> shows what you'd earn by simply holding the tokens.<br>
+      📊 Hover over graphs to explore how these metrics behave.
+    </p>
+
+    <!-- ✅ Inputs -->
+    <div class="space-y-3 text-sm sm:text-base">
+      <div>
+        <label>Initial Price of Token A:</label>
+        <input id="initialPriceA" type="number" step="0.01" class="border p-2 w-full rounded dark:bg-gray-700 dark:border-gray-600"/>
+      </div>
+
+      <div>
+        <label>Initial Price of Token B:</label>
+        <input id="initialPriceB" type="number" step="0.01" class="border p-2 w-full rounded dark:bg-gray-700 dark:border-gray-600"/>
+      </div>
+
+      <div>
+        <label>Price Change (%):</label>
+        <input id="priceChange" type="number" step="0.01" class="border p-2 w-full rounded dark:bg-gray-700 dark:border-gray-600"/>
+      </div>
+
+      <div>
+        <label>Token that Changed:</label>
+        <select id="tokenChanged" class="border p-2 w-full rounded dark:bg-gray-700 dark:border-gray-600">
+          <option value="A">Token A</option>
+          <option value="B">Token B</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Min Price Range <span class="text-xs text-gray-500">(Token A ÷ Token B)</span>:</label>
+        <input id="minRange" type="number" step="0.01" class="border p-2 w-full rounded dark:bg-gray-700 dark:border-gray-600"/>
+      </div>
+
+      <div>
+        <label>Max Price Range <span class="text-xs text-gray-500">(Token A ÷ Token B)</span>:</label>
+        <input id="maxRange" type="number" step="0.01" class="border p-2 w-full rounded dark:bg-gray-700 dark:border-gray-600"/>
+      </div>
+
+      <button onclick="calculateIL()" class="bg-blue-600 text-white px-4 py-2 w-full rounded shadow hover:bg-blue-700 transition">
+        Calculate
+      </button>
+    </div>
+
+    <div id="result" class="mt-4 font-semibold text-base text-blue-700 dark:text-blue-300 whitespace-pre-line"></div>
+
+    <!-- ✅ Charts -->
+    <h2 class="text-xl font-semibold mt-8 mb-2 text-gray-800 dark:text-gray-200">Impermanent Loss</h2>
+    <canvas id="ilChart" class="mt-2"></canvas>
+
+    <h2 class="text-xl font-semibold mt-8 mb-2 text-gray-800 dark:text-gray-200">Opportunity Cost vs HODL</h2>
+    <canvas id="opportunityChart" class="mt-2"></canvas>
+  </div>
+
+  <!-- ✅ Script -->
+  <script>
+    function toggleDarkMode() {
+      document.documentElement.classList.toggle('dark');
+    }
+
+    let chart;
+    let opportunityChart;
+
+    function calculateIL() {
+      const P0A = parseFloat(document.getElementById("initialPriceA").value);
+      const P0B = parseFloat(document.getElementById("initialPriceB").value);
+      const changePercent = parseFloat(document.getElementById("priceChange").value);
+      const tokenChanged = document.getElementById("tokenChanged").value;
+      const minRange = parseFloat(document.getElementById("minRange").value);
+      const maxRange = parseFloat(document.getElementById("maxRange").value);
+
+      if (!P0A || !P0B || isNaN(changePercent)) {
+        document.getElementById("result").innerText = "Please enter valid values.";
+        return;
+      }
+
+      const min = Math.min(minRange, maxRange);
+      const max = Math.max(minRange, maxRange);
+
+      const initialRatio = P0A / P0B;
+      let newPA = P0A;
+      let newPB = P0B;
+
+      if (tokenChanged === 'A') {
+        newPA = P0A * (1 + changePercent / 100);
+      } else {
+        newPB = P0B * (1 + changePercent / 100);
+      }
+
+      const newRatio = newPA / newPB;
+      const r = newRatio / initialRatio;
+      const IL = 1 - ((2 * Math.sqrt(r)) / (1 + r));
+      const ILPercent = (IL * 100).toFixed(2);
+
+      const totalInitialValue = 1000;
+      const tokenAHold = (totalInitialValue / 2) / P0A;
+      const tokenBHold = (totalInitialValue / 2) / P0B;
+      const hodlValue = (tokenAHold * newPA) + (tokenBHold * newPB);
+
+      let resultText = "";
+
+      if (!isNaN(minRange) && !isNaN(maxRange) && (newRatio < min || newRatio > max)) {
+        let lpValue;
+        if (newRatio < min) {
+          lpValue = (tokenBHold + tokenAHold * P0A / P0B) * newPB;
+        } else {
+          lpValue = (tokenAHold + tokenBHold * P0B / P0A) * newPA;
+        }
+
+        const oppCost = ((hodlValue - lpValue) / hodlValue) * 100;
+        resultText = `💡 Price moved outside your range → You hold one token only
+→ Impermanent Loss = 0%
+📉 Opportunity Cost vs HODL: ${oppCost.toFixed(2)}%`;
+      } else {
+        resultText = `📊 Price is in range → Impermanent Loss: ${ILPercent}%`;
+      }
+
+      document.getElementById("result").innerText = resultText;
+
+      drawChart(initialRatio, tokenChanged, P0A, P0B);
+      drawOpportunityCost(initialRatio, tokenChanged, P0A, P0B);
+    }
+
+    function drawChart(initialRatio, tokenChanged, P0A, P0B) {
+      const percentChanges = [];
+      const ilValues = [];
+
+      for (let pct = -80; pct <= 200; pct += 5) {
+        let newPA = P0A;
+        let newPB = P0B;
+
+        if (tokenChanged === 'A') {
+          newPA = P0A * (1 + pct / 100);
+        } else {
+          newPB = P0B * (1 + pct / 100);
+        }
+
+        const newRatio = newPA / newPB;
+        const r = newRatio / initialRatio;
+        const IL = 1 - ((2 * Math.sqrt(r)) / (1 + r));
+        percentChanges.push(pct);
+        ilValues.push(IL * 100);
+      }
+
+      const ctx = document.getElementById("ilChart").getContext("2d");
+      if (chart) chart.destroy();
+
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: percentChanges,
+          datasets: [{
+            label: 'Impermanent Loss (%)',
+            data: ilValues,
+            borderColor: 'blue',
+            borderWidth: 2,
+            pointRadius: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { tooltip: { enabled: true } },
+          scales: {
+            x: { title: { display: true, text: '% Price Change' } },
+            y: { title: { display: true, text: 'Impermanent Loss (%)' } }
+          }
+        }
+      });
+    }
+
+    function drawOpportunityCost(initialRatio, tokenChanged, P0A, P0B) {
+      const percentChanges = [];
+      const opportunityValues = [];
+      const totalInitialValue = 1000;
+
+      const tokenAHold = (totalInitialValue / 2) / P0A;
+      const tokenBHold = (totalInitialValue / 2) / P0B;
+
+      for (let pct = -80; pct <= 200; pct += 5) {
+        let newPA = P0A;
+        let newPB = P0B;
+
+        if (tokenChanged === 'A') {
+          newPA = P0A * (1 + pct / 100);
+        } else {
+          newPB = P0B * (1 + pct / 100);
+        }
+
+        const newRatio = newPA / newPB;
+        const hodlValue = (tokenAHold * newPA) + (tokenBHold * newPB);
+
+        let lpValue;
+        if (newRatio < 1) {
+          lpValue = (tokenBHold + tokenAHold * P0A / P0B) * newPB;
+        } else {
+          lpValue = (tokenAHold + tokenBHold * P0B / P0A) * newPA;
+        }
+
+        const oppCost = ((hodlValue - lpValue) / hodlValue) * 100;
+        percentChanges.push(pct);
+        opportunityValues.push(oppCost);
+      }
+
+      const ctx = document.getElementById("opportunityChart").getContext("2d");
+      if (opportunityChart) opportunityChart.destroy();
+
+      opportunityChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: percentChanges,
+          datasets: [{
+            label: 'Opportunity Cost vs HODL (%)',
+            data: opportunityValues,
+            borderColor: 'red',
+            borderWidth: 2,
+            pointRadius: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { tooltip: { enabled: true } },
+          scales: {
+            x: { title: { display: true, text: '% Price Change' } },
+            y: { title: { display: true, text: 'Opportunity Cost (%)' } }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
